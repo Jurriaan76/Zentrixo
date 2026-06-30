@@ -1,7 +1,8 @@
 name: Gemini Assistent
 
 on:
-  workflow_dispatch:
+  issues:
+    types: [opened]
 
 jobs:
   run-script:
@@ -22,7 +23,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: '2'
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
           REPO: ${{ github.repository }}
         run: |
           python -c "
@@ -33,16 +35,17 @@ jobs:
           github_token = os.getenv('GITHUB_TOKEN')
           repo = os.getenv('REPO')
           issue_number = os.getenv('ISSUE_NUMBER')
+          issue_body = os.getenv('ISSUE_BODY', 'Geen tekst meegegeven.')
           
-          print('-> Verbinding maken met Gemini...')
+          # We sturen de tekst van jouw Issue rechtstreeks naar Gemini
           client = genai.Client(api_key=api_key)
-          response = client.models.generate_content(model='gemini-2.5-flash', contents='Hallo! De koppeling werkt perfect!')
+          response = client.models.generate_content(
+              model='gemini-2.5-flash', 
+              contents=issue_body
+          )
           gpt_tekst = response.text
-          print('-> Gemini antwoord:', gpt_tekst)
           
           url = f'https://api.github.com/repos/{repo}/issues/{issue_number}/comments'
           headers = {'Authorization': f'token {github_token}', 'Accept': 'application/vnd.github.v3+json'}
-          res = requests.post(url, headers=headers, json={'body': gpt_tekst})
-          print('-> GitHub Statuscode:', res.status_code)
-          print('-> GitHub Response:', res.text)
+          requests.post(url, headers=headers, json={'body': gpt_tekst})
           "
