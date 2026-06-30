@@ -1,12 +1,10 @@
 name: Gemini Dagelijkse Assistent
 
 on:
-  issues:
-    types: [labeled]
+  workflow_dispatch: # Dit activeert de handmatige startknop!
 
 jobs:
   assisteer:
-    if: github.event.label.name == 'help-mij'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -25,8 +23,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: '1' # We testen nu hardcoded op je eerste issue!
+          ISSUE_TITLE: 'Handmatige Test'
+          ISSUE_BODY: 'Dit is een handmatige test om te kijken of de API-verbinding werkt.'
           REPO: ${{ github.repository }}
         run: python .github/scripts/assistent.py
