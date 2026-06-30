@@ -1,9 +1,9 @@
 name: Zentrixo WinningHunter Automation (5 Products)
 
 on:
-  workflow_dispatch: # Handmatig starten wanneer je wilt
+  workflow_dispatch:
   schedule:
-    - cron: '0 9 * * *' # Draait elke ochtend automatisch om 09:00 uur
+    - cron: '0 9 * * *'
 
 jobs:
   fetch-and-generate:
@@ -37,7 +37,6 @@ jobs:
               with open('prompts.md', 'r', encoding='utf-8') as f:
                   system_instruction = f.read()
           
-          # De limiet staat nu strak op 5 producten ingesteld!
           wh_url = 'https://api.winninghunter.com/v1/products?limit=5&sort=trending'
           headers = {'Authorization': f'Bearer {wh_key}', 'Accept': 'application/json'}
           
@@ -45,29 +44,44 @@ jobs:
           products_list = []
           try:
               response = requests.get(wh_url, headers=headers)
+              print(f'-> API Status Code: {response.status_code}')
               response.raise_for_status()
               wh_data = response.json()
-              products_list = wh_data.get('products', [])
-              print(f'-> Succesvol {len(products_list)} producten binnengehaald uit API.')
+              
+              # Flexibele JSON parsing: WinningHunter geeft soms een lijst, soms een object met een 'products' key
+              if isinstance(wh_data, list):
+                  products_list = wh_data
+              elif isinstance(wh_data, dict):
+                  products_list = wh_data.get('products', wh_data.get('data', []))
+              
+              print(f'-> Aantal producten uit API: {len(products_list)}')
           except Exception as e:
-              print(f'-> API Connectie mislukt: {e}')
+              print(f'-> API Connectie of parsing mislukt: {e}')
+          
+          # Veilige fallback: Als de API leeg is of faalt, vullen we ALTIJD 5 testproducten om de marketing-engine te testen
+          if not products_list:
+              print('-> API leverde geen data. We activeren de 5-producten fallback-modus...')
               products_list = [
-                  {'title': 'Draagbare Nekventilator Pro', 'description': 'Draadloze nekventilator.', 'source_url': 'https://winninghunter.com/1'},
-                  {'title': 'Anti-Knoei Voerbak', 'description': 'Handige anti-spill hondenvoerbak.', 'source_url': 'https://winninghunter.com/2'},
-                  {'title': 'Orthopedisch Zitkussen', 'description': 'Traagschuim kussen tegen rugpijn.', 'source_url': 'https://winninghunter.com/3'}
+                  {'title': 'Draagbare Nekventilator Pro', 'description': 'Draadloze nekventilator met 3 versnellingen.', 'source_url': 'https://winninghunter.com/1'},
+                  {'title': 'Anti-Knoei Voerbak', 'description': 'Anti-spill hondenvoerbak met zwevende schijf.', 'source_url': 'https://winninghunter.com/2'},
+                  {'title': 'Orthopedisch Traagschuim Zitkussen', 'description': 'Ergonomisch kussen tegen rugpijn.', 'source_url': 'https://winninghunter.com/3'},
+                  {'title': 'Automatische Zeepdispenser', 'description': 'Infrarood sensor dispenser voor badkamer en keuken.', 'source_url': 'https://winninghunter.com/4'},
+                  {'title': 'Ultrasone Huid Scrubber', 'description': 'Gezichtsreiniger voor diepe poriënreiniging.', 'source_url': 'https://winninghunter.com/5'}
               ]
           
           client = genai.Client(api_key=gemini_key)
           datum = datetime.date.today().strftime('%d-%m-%Y')
           os.makedirs('producten', exist_ok=True)
           
-          # Loop door de top 5 producten heen
+          # Verwerk exact 5 producten
           for index, product in enumerate(products_list[:5], start=1):
-              product_naam = product.get('title', f'Trend Product {index}')
-              product_description = product.get('description', '')
-              source_url = product.get('source_url', 'Geen link')
+              if not isinstance(product, dict):
+                  continue
+              product_naam = product.get('title', product.get('name', f'Trend Product {index}'))
+              product_description = product.get('description', product.get('summary', 'Geen omschrijving beschikbaar.'))
+              source_url = product.get('source_url', product.get('url', 'Geen link'))
               
-              print(f'-> [{index}/5] Gemini genereert marketingpakket voor: {product_naam}...')
+              print(f'-> [{index}/5] Gemini start marketingpakket voor: {product_naam}...')
               
               prompt = f'''
               Maak een compleet marketingpakket in het Nederlands voor Zentrixo.nl.
@@ -89,6 +103,7 @@ jobs:
                       config={'system_instruction': system_instruction}
                   )
                   
+                  # Maak een veilige bestandsnaam
                   safe_title = re.sub(r'[^a-zA-Z0-9]', '_', product_naam).lower()[:20]
                   filename = f'producten/{datum}_{safe_title}.md'
                   
@@ -99,9 +114,9 @@ jobs:
                       f.write('--- \n\n')
                       f.write(ai_response.text)
                       
-                  print(f'-> Opgeslagen in {filename}')
+                  print(f'-> Succesvol weggeschreven: {filename}')
               except Exception as ai_err:
-                  print(f'-> Fout bij genereren voor {product_naam}: {ai_err}')
+                  print(f'-> Fout bij Gemini generatie voor {product_naam}: {ai_err}')
           "
 
       - name: Wijzigingen opslaan in GitHub
@@ -109,4 +124,4 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add producten/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "5 live WinningHunter marketingpakketten automatisch toegevoegd" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "5 live marketingpakketten automatisch gegenereerd" && git push)
