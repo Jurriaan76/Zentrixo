@@ -1,0 +1,32 @@
+name: Gemini Dagelijkse Assistent
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  assisteer:
+    if: github.event.label.name == 'help-mij'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Installeer bibliotheken
+        run: |
+          pip install google-genai requests
+
+      - name: Voer assistent-script uit
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          REPO: ${{ github.repository }}
+        run: python .github/scripts/assistent.py
