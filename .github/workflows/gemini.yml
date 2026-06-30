@@ -15,12 +15,13 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Installeer en Draai
+      - name: Installeer bibliotheken
+        run: pip install google-genai requests
+
+      - name: Voer assistent-script uit
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: '1'
           REPO: ${{ github.repository }}
-        run: |
-          pip install google-genai requests
-          python assistent.py
+        run: python assistent.py
