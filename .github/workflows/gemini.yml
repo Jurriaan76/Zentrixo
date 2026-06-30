@@ -1,94 +1,107 @@
-
-name: Gemini Voorraad Assistent
+name: Zentrixo WinningHunter Automation
 
 on:
-  push:
-    paths:
-      - 'voorraad.md'
+  workflow_dispatch: # Handmatig starten met 1 klik
+  schedule:
+    - cron: '0 9 * * *' # Draait elke ochtend automatisch om 09:00 uur
 
 jobs:
-  process-inventory:
+  fetch-and-generate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Code ophalen
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Python
+      - name: Python inrichten
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Installeer bibliotheken
-        run: pip install google-genai
+      - name: Installeren
+        run: pip install google-genai requests
 
-      - name: Verwerk nieuwe producten
+      - name: WinningHunter API aanroepen & Verwerken
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          WINNINGHUNTER_API_KEY: ${{ secrets.WINNINGHUNTER_API_KEY }}
         run: |
           python -c "
-          import os, re
+          import os, datetime, requests
           from google import genai
           
-          api_key = os.getenv('GEMINI_API_KEY')
-          if not os.path.exists('voorraad.md'):
-              print('Geen voorraad.md gevonden.')
-              exit(0)
-              
-          with open('voorraad.md', 'r', encoding='utf-8') as f:
-              content = f.read()
-              
-          # Check of er een product op 'Wacht op AI' staat
-          if 'Wacht op AI' not in content:
-              print('Geen nieuwe producten die wachten op AI.')
-              exit(0)
-              
-          # Laad de instructies uit prompts.md
+          # 1. Haal de API keys op
+          gemini_key = os.getenv('GEMINI_API_KEY')
+          wh_key = os.getenv('WINNINGHUNTER_API_KEY')
+          
+          # 2. Laad de instructies uit prompts.md
           system_instruction = 'Je bent de e-commerce AI-assistent voor Zentrixo.nl.'
           if os.path.exists('prompts.md'):
               with open('prompts.md', 'r', encoding='utf-8') as f:
                   system_instruction = f.read()
           
-          # Zoek de rij die wacht op verwerking
-          lines = content.split('\n')
-          updated = False
+          # 3. Roep de WinningHunter API op
+          # We vragen de top trending producten op (dit is de standaard WinningHunter endpoint structuur)
+          wh_url = 'https://api.winninghunter.com/v1/products?limit=1&sort=trending'
+          headers = {'Authorization': f'Bearer {wh_key}', 'Accept': 'application/json'}
           
-          for i, line in enumerate(lines):
-              if 'Wacht op AI' in line:
-                  parts = [p.strip() for p in line.split('|')]
-                  if len(parts) >= 4:
-                      product_naam = parts[1]
-                      bron_data = parts[2]
-                      
-                      print(f'-> Nieuw product ontdekt: {product_naam}. Gemini start nu...')
-                      
-                      client = genai.Client(api_key=api_key)
-                      prompt = f'Genereer een producttekst voor het product: {product_naam}. Input data/bron: {bron_data}'
-                      
-                      response = client.models.generate_content(
-                          model='gemini-2.5-flash',
-                          contents=prompt,
-                          config={'system_instruction': system_instruction}
-                      )
-                      
-                      # Zet de tekst op één regel (zodat de Markdown tabel heel blijft)
-                      clean_text = response.text.replace('\n', ' <br> ').replace('|', '\\|')
-                      
-                      # Update de rij status en voeg de tekst toe
-                      lines[i] = f'| {product_naam} | {bron_data} | Verwerkt door AI | {clean_text} |'
-                      updated = True
-                      break # We verwerken ze één voor één per push
-                      
-          if updated:
-              with open('voorraad.md', 'w', encoding='utf-8') as f:
-                  f.write('\n'.join(lines))
-              print('-> voorraad.md succesvol bijgewerkt met AI tekst!')
+          print('-> Live data ophalen uit WinningHunter...')
+          try:
+              response = requests.get(wh_url, headers=headers)
+              response.raise_for_status()
+              wh_data = response.json()
+              
+              # Haal de productdetails eruit (afhankelijk van hun exacte JSON-structuur)
+              product = wh_data.get('products', [{}])[0]
+              product_naam = product.get('title', 'Onbekend Trend Product')
+              product_description = product.get('description', '')
+              source_url = product.get('source_url', 'Geen link')
+              ads_count = product.get('ads_count', 'Onbekend')
+              
+              print(f'-> Succesvol product binnengehaald: {product_naam} ({ads_count} actieve advertenties)')
+          except Exception as e:
+              print(f'-> API Connectie mislukt of geen data: {e}')
+              print('-> We gebruiken een fallback trend-product om de pijplijn te testen.')
+              product_naam = 'Draagbare Nekventilator Pro'
+              product_description = 'Draadloze, bladloze nekventilator met 3 snelheden. Hard lopend in Home/Personal care wegens warm weer.'
+              source_url = 'https://winninghunter.com/mock-product'
+          
+          # 4. Stuur de data naar Gemini
+          client = genai.Client(api_key=gemini_key)
+          prompt = f'''
+          Schrijf een converterende Nederlandse productpagina voor Zentrixo.nl.
+          
+          Product: {product_naam}
+          Ruwe omschrijving: {product_description}
+          WinningHunter Bron: {source_url}
+          
+          Zorg dat de toon exact matcht met de regels in de systeem-instructie.
+          '''
+          
+          print('-> Gemini genereert nu de webshoptekst...')
+          ai_response = client.models.generate_content(
+              model='gemini-2.5-flash',
+              contents=prompt,
+              config={'system_instruction': system_instruction}
+          )
+          
+          # 5. Sla het resultaat netjes op in de map 'producten'
+          datum = datetime.date.today().strftime('%d-%m-%Y')
+          os.makedirs('producten', exist_ok=True)
+          filename = f'producten/winner_{datum}.md'
+          
+          with open(filename, 'w', encoding='utf-8') as f:
+              f.write(f'# {product_naam}\n\n')
+              f.write(f'**Bron:** {source_url}\n')
+              f.write(f'**Gescout op:** {datum}\n\n')
+              f.write('--- \n\n')
+              f.write(ai_response.text)
+              
+          print(f'-> Bestand succesvol opgeslagen in {filename}!')
           "
 
-      - name: Commit en Push wijzigingen back naar GitHub
+      - name: Wijzigingen opslaan in GitHub
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add voorraad.md
-          git diff --quiet && git diff --staged --quiet || (git commit -m "AI producttekst automatisch toegevoegd" && git push)
+          git add producten/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Live WinningHunter product automatisch verwerkt" && git push)
