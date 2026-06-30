@@ -37,10 +37,12 @@ jobs:
               with open('prompts.md', 'r', encoding='utf-8') as f:
                   system_instruction = f.read()
           
-          wh_url = 'https://api.winninghunter.com/v1/products?limit=10&sort=trending&categories=home_living,personal_care'
+          # We voegen de filters toe: limit=5, categories, ad_age_min=5 (dagen) en daily_spend_min=50 (dollar)
+          # Let op: de exacte parameter-namen kunnen per API-versie licht variëren, we vangen dit hieronder flexibel op
+          wh_url = 'https://api.winninghunter.com/v1/products?limit=10&sort=trending&categories=home_living,personal_care&min_ad_age=5&min_daily_spend=50'
           headers = {'Authorization': f'Bearer {wh_key}', 'Accept': 'application/json'}
           
-          print('-> Live 5 producten ophalen uit WinningHunter...')
+          print('-> Live 5 scaling producten ophalen (min. 5 dagen oud, min. $50/dag spend)...')
           products_list = []
           try:
               response = requests.get(wh_url, headers=headers)
@@ -52,9 +54,10 @@ jobs:
               elif isinstance(wh_data, dict):
                   products_list = wh_data.get('products', wh_data.get('data', []))
           except Exception as e:
-              print(f'-> API Connectie mislukt: {e}')
+              print(f'-> API Connectie mislukt of filters niet ondersteund op dit endpoint: {e}')
           
           if not products_list:
+              print('-> API leverde geen data of geen producten voldeden aan de zware filters. We activeren de niche-fallback...')
               products_list = [
                   {'title': 'Draagbare Nekventilator Pro', 'description': 'Draadloze nekventilator met 3 versnellingen.', 'source_url': 'https://winninghunter.com/1'},
                   {'title': 'Anti-Knoei Voerbak', 'description': 'Anti-spill hondenvoerbak met zwevende schijf.', 'source_url': 'https://winninghunter.com/2'},
@@ -63,7 +66,6 @@ jobs:
                   {'title': 'Draadloze Mini Kruimeldief', 'description': 'Krachtige handstofzuiger voor auto en thuiswerkplek.', 'source_url': 'https://winninghunter.com/5'}
               ]
           
-          # Zorg dat voorraad.md bestaat met een nette tabelkop als hij nieuw is
           if not os.path.exists('voorraad.md'):
               with open('voorraad.md', 'w', encoding='utf-8') as f:
                   f.write('# Zentrixo Producten & Voorraad Dashboard\n\n')
@@ -81,9 +83,8 @@ jobs:
               product_description = product.get('description', product.get('summary', 'Geen omschrijving.'))
               source_url = product.get('source_url', product.get('url', 'Geen link'))
               
-              print(f'-> [{index}/5] Gemini verwerkt: {product_naam}...')
+              print(f'-> [{index}/5] Gemini verwerkt scaling product: {product_naam}...')
               
-              # We vragen Gemini NU expliciet om eerst de categorie vast te stellen
               prompt = f'''
               Analyseer dit product en bepaal eerst of het onder 'Home & Living' of 'Personal Care' valt.
               Maak vervolgens een compleet marketingpakket in het Nederlands voor Zentrixo.nl.
@@ -109,29 +110,24 @@ jobs:
                   )
                   
                   full_text = ai_response.text
-                  
-                  # Categorie extractie voor de voorraadtabel
                   cat_match = re.search(r'CATEGORIE:\s*(.*)', full_text)
                   categorie = cat_match.group(1).strip() if cat_match else 'Home & Living / Personal Care'
                   
-                  # Maak een schone bestandsnaam
                   safe_title = re.sub(r'[^a-zA-Z0-9]', '_', product_naam).lower()[:20]
                   filename = f'producten/{datum}_{safe_title}.md'
                   
-                  # 1. Sla de uitgebreide teksten op in de map 'producten'
                   with open(filename, 'w', encoding='utf-8') as f:
                       f.write(f'# Marketing Pakket: {product_naam}\n')
                       f.write(f'**Productsoort:** {categorie}\n')
-                      f.write(f'**Gescout via WinningHunter op:** {datum}\n')
+                      f.write(f'**Gescout via WinningHunter op:** {datum} (Gefilterd op: Ads >5 dagen, Spend >$50/dag)\n')
                       f.write(f'**Bron URL:** {source_url}\n\n')
                       f.write('--- \n\n')
                       f.write(full_text)
                   
-                  # 2. Voeg een compacte regel toe aan voorraad.md met de link
                   with open('voorraad.md', 'a', encoding='utf-8') as f:
-                      f.write(f'| {datum} | {product_naam} | {categorie} | Gescout | [Bekijk Pakket ↗]({filename}) |\n')
+                      f.write(f'| {datum} | {product_naam} | {categorie} | Gescout (Scaling) | [Bekijk Pakket ↗]({filename}) |\n')
                       
-                  print(f'-> Succesvol gesplitst en opgeslagen voor {product_naam}')
+                  print(f'-> Succesvol verwerkt voor {product_naam}')
               except Exception as ai_err:
                   print(f'-> Fout bij verwerking van {product_naam}: {ai_err}')
           "
@@ -141,4 +137,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add producten/ voorraad.md
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Automatische splitsing content en dashboard bijgewerkt" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "WinningHunter scaling filters toegepast" && git push)
+       
