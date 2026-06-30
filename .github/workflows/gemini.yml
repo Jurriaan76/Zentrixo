@@ -1,3 +1,4 @@
+
 name: Gemini Assistent
 
 on:
@@ -15,21 +16,13 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Controleer Python en start installatie
-        run: |
-          echo "=== STAP 1: Python controleren ==="
-          python --version
-          echo "=== STAP 2: Bibliotheken installeren ==="
-          pip install google-genai requests
-          echo "=== STAP 3: Installatie voltooid ==="
+      - name: Installeer bibliotheken
+        run: pip install google-genai requests
 
       - name: Voer assistent-script uit
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: '1'
+          ISSUE_NUMBER: '2'
           REPO: ${{ github.repository }}
-        run: |
-          echo "=== STAP 4: Script opstarten ==="
-          python assistent.py
-          echo "=== STAP 5: Script volledig klaar ==="
+        run: python assistent.py
