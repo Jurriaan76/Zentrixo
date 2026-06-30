@@ -32,67 +32,64 @@ jobs:
           gemini_key = os.getenv('GEMINI_API_KEY')
           wh_key = os.getenv('WINNINGHUNTER_API_KEY')
           
-          system_instruction = 'Je bent de e-commerce marketing-assistent voor Zentrixo.nl.'
+          system_instruction = 'Je bent de e-commerce marketing-assistent voor Zentrixo.nl. Focus ALTIJD strikt op Home & Living en Personal Care producten.'
           if os.path.exists('prompts.md'):
               with open('prompts.md', 'r', encoding='utf-8') as f:
                   system_instruction = f.read()
           
-          wh_url = 'https://api.winninghunter.com/v1/products?limit=5&sort=trending'
+          # We voegen categorie-filters toe aan de WinningHunter URL zodat beauty/kleding gefilterd wordt
+          wh_url = 'https://api.winninghunter.com/v1/products?limit=10&sort=trending&categories=home_living,personal_care'
           headers = {'Authorization': f'Bearer {wh_key}', 'Accept': 'application/json'}
           
           print('-> Live 5 producten ophalen uit WinningHunter...')
           products_list = []
           try:
               response = requests.get(wh_url, headers=headers)
-              print(f'-> API Status Code: {response.status_code}')
               response.raise_for_status()
               wh_data = response.json()
               
-              # Flexibele JSON parsing: WinningHunter geeft soms een lijst, soms een object met een 'products' key
               if isinstance(wh_data, list):
                   products_list = wh_data
               elif isinstance(wh_data, dict):
                   products_list = wh_data.get('products', wh_data.get('data', []))
-              
-              print(f'-> Aantal producten uit API: {len(products_list)}')
           except Exception as e:
               print(f'-> API Connectie of parsing mislukt: {e}')
           
-          # Veilige fallback: Als de API leeg is of faalt, vullen we ALTIJD 5 testproducten om de marketing-engine te testen
+          # Gecorrigeerde fallback-lijst: 100% passend bij Zentrixo.nl (Nee tegen beauty, ja tegen Home & Personal Care!)
           if not products_list:
-              print('-> API leverde geen data. We activeren de 5-producten fallback-modus...')
+              print('-> API leverde geen data. We activeren de gecorrigeerde niche-fallback...')
               products_list = [
                   {'title': 'Draagbare Nekventilator Pro', 'description': 'Draadloze nekventilator met 3 versnellingen.', 'source_url': 'https://winninghunter.com/1'},
                   {'title': 'Anti-Knoei Voerbak', 'description': 'Anti-spill hondenvoerbak met zwevende schijf.', 'source_url': 'https://winninghunter.com/2'},
                   {'title': 'Orthopedisch Traagschuim Zitkussen', 'description': 'Ergonomisch kussen tegen rugpijn.', 'source_url': 'https://winninghunter.com/3'},
-                  {'title': 'Automatische Zeepdispenser', 'description': 'Infrarood sensor dispenser voor badkamer en keuken.', 'source_url': 'https://winninghunter.com/4'},
-                  {'title': 'Ultrasone Huid Scrubber', 'description': 'Gezichtsreiniger voor diepe poriënreiniging.', 'source_url': 'https://winninghunter.com/5'}
+                  {'title': 'Intelligente Nek Massager', 'description': 'Verwarmd massage-apparaat voor nek- en schouderontspanning.', 'source_url': 'https://winninghunter.com/4'},
+                  {'title': 'Draadloze Mini Kruimeldief', 'description': 'Krachtige handstofzuiger voor auto en thuiswerkplek.', 'source_url': 'https://winninghunter.com/5'}
               ]
           
           client = genai.Client(api_key=gemini_key)
           datum = datetime.date.today().strftime('%d-%m-%Y')
           os.makedirs('producten', exist_ok=True)
           
-          # Verwerk exact 5 producten
           for index, product in enumerate(products_list[:5], start=1):
               if not isinstance(product, dict):
                   continue
               product_naam = product.get('title', product.get('name', f'Trend Product {index}'))
-              product_description = product.get('description', product.get('summary', 'Geen omschrijving beschikbaar.'))
+              product_description = product.get('description', product.get('summary', 'Geen omschrijving.'))
               source_url = product.get('source_url', product.get('url', 'Geen link'))
               
               print(f'-> [{index}/5] Gemini start marketingpakket voor: {product_naam}...')
               
               prompt = f'''
               Maak een compleet marketingpakket in het Nederlands voor Zentrixo.nl.
+              Dit product MOET binnen Home & Living of Personal Care vallen.
               
               Product: {product_naam}
               Specificaties/Data: {product_description}
               Bron: {source_url}
               
-              Lever de volgende onderdelen op, strak gescheiden met duidelijke koppen:
+              Lever op met strakke koppen:
               ## 1. Webshop Productpagina
-              ## 2. Meta Ads (Facebook & Instagram) Campaign (3 Ads)
+              ## 2. Meta Ads (3 Ads)
               ## 3. TikTok / Short-form Video Script (UGC Stijl)
               '''
               
@@ -103,7 +100,6 @@ jobs:
                       config={'system_instruction': system_instruction}
                   )
                   
-                  # Maak een veilige bestandsnaam
                   safe_title = re.sub(r'[^a-zA-Z0-9]', '_', product_naam).lower()[:20]
                   filename = f'producten/{datum}_{safe_title}.md'
                   
@@ -124,4 +120,4 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add producten/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "5 live marketingpakketten automatisch gegenereerd" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "5 live niche-gerichte marketingpakketten automatisch toegevoegd" && git push)
