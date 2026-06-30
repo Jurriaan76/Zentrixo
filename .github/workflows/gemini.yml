@@ -1,4 +1,3 @@
-
 name: Gemini Assistent
 
 on:
@@ -19,10 +18,31 @@ jobs:
       - name: Installeer bibliotheken
         run: pip install google-genai requests
 
-      - name: Voer assistent-script uit
+      - name: Voer assistent uit
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: '2'
           REPO: ${{ github.repository }}
-        run: python assistent.py
+        run: |
+          python -c "
+          import os, requests
+          from google import genai
+          
+          api_key = os.getenv('GEMINI_API_KEY')
+          github_token = os.getenv('GITHUB_TOKEN')
+          repo = os.getenv('REPO')
+          issue_number = os.getenv('ISSUE_NUMBER')
+          
+          print('-> Verbinding maken met Gemini...')
+          client = genai.Client(api_key=api_key)
+          response = client.models.generate_content(model='gemini-2.5-flash', contents='Hallo! De koppeling werkt perfect!')
+          gpt_tekst = response.text
+          print('-> Gemini antwoord:', gpt_tekst)
+          
+          url = f'https://api.github.com/repos/{repo}/issues/{issue_number}/comments'
+          headers = {'Authorization': f'token {github_token}', 'Accept': 'application/vnd.github.v3+json'}
+          res = requests.post(url, headers=headers, json={'body': gpt_tekst})
+          print('-> GitHub Statuscode:', res.status_code)
+          print('-> GitHub Response:', res.text)
+          "
