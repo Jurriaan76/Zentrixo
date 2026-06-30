@@ -1,9 +1,9 @@
 name: Zentrixo WinningHunter Automation
 
 on:
-  workflow_dispatch: # Handmatig starten met 1 klik
+  workflow_dispatch:
   schedule:
-    - cron: '0 9 * * *' # Draait elke ochtend automatisch om 09:00 uur
+    - cron: '0 9 * * *'
 
 jobs:
   fetch-and-generate:
@@ -20,7 +20,7 @@ jobs:
       - name: Installeren
         run: pip install google-genai requests
 
-      - name: WinningHunter API aanroepen & Verwerken
+      - name: WinningHunter API aanroepen & Volledige Marketing Genereren
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           WINNINGHUNTER_API_KEY: ${{ secrets.WINNINGHUNTER_API_KEY }}
@@ -29,18 +29,14 @@ jobs:
           import os, datetime, requests
           from google import genai
           
-          # 1. Haal de API keys op
           gemini_key = os.getenv('GEMINI_API_KEY')
           wh_key = os.getenv('WINNINGHUNTER_API_KEY')
           
-          # 2. Laad de instructies uit prompts.md
-          system_instruction = 'Je bent de e-commerce AI-assistent voor Zentrixo.nl.'
+          system_instruction = 'Je bent de e-commerce marketing-assistent voor Zentrixo.nl.'
           if os.path.exists('prompts.md'):
               with open('prompts.md', 'r', encoding='utf-8') as f:
                   system_instruction = f.read()
           
-          # 3. Roep de WinningHunter API op
-          # We vragen de top trending producten op (dit is de standaard WinningHunter endpoint structuur)
           wh_url = 'https://api.winninghunter.com/v1/products?limit=1&sort=trending'
           headers = {'Authorization': f'Bearer {wh_key}', 'Accept': 'application/json'}
           
@@ -49,54 +45,60 @@ jobs:
               response = requests.get(wh_url, headers=headers)
               response.raise_for_status()
               wh_data = response.json()
-              
-              # Haal de productdetails eruit (afhankelijk van hun exacte JSON-structuur)
               product = wh_data.get('products', [{}])[0]
               product_naam = product.get('title', 'Onbekend Trend Product')
               product_description = product.get('description', '')
               source_url = product.get('source_url', 'Geen link')
-              ads_count = product.get('ads_count', 'Onbekend')
-              
-              print(f'-> Succesvol product binnengehaald: {product_naam} ({ads_count} actieve advertenties)')
           except Exception as e:
-              print(f'-> API Connectie mislukt of geen data: {e}')
-              print('-> We gebruiken een fallback trend-product om de pijplijn te testen.')
+              print(f'-> API Connectie mislukt, we gebruiken de test-ventilator: {e}')
               product_naam = 'Draagbare Nekventilator Pro'
-              product_description = 'Draadloze, bladloze nekventilator met 3 snelheden. Hard lopend in Home/Personal care wegens warm weer.'
+              product_description = 'Draadloze, bladloze nekventilator met 3 snelheden. Hard lopend in Home/Personal care.'
               source_url = 'https://winninghunter.com/mock-product'
           
-          # 4. Stuur de data naar Gemini
           client = genai.Client(api_key=gemini_key)
+          
+          # We breiden de opdracht aan Gemini fors uit
           prompt = f'''
-          Schrijf een converterende Nederlandse productpagina voor Zentrixo.nl.
+          Maak een compleet marketingpakket in het Nederlands voor Zentrixo.nl op basis van dit WinningHunter product.
           
           Product: {product_naam}
-          Ruwe omschrijving: {product_description}
-          WinningHunter Bron: {source_url}
+          Specificaties/Data: {product_description}
+          Bron: {source_url}
           
-          Zorg dat de toon exact matcht met de regels in de systeem-instructie.
+          Lever de volgende onderdelen op, strak gescheiden met duidelijke koppen:
+          
+          ## 1. Webshop Productpagina
+          Schrijf een converterende producttekst volgens de exacte richtlijnen in de systeem-instructie.
+          
+          ## 2. Meta Ads (Facebook & Instagram) Campaign
+          Schrijf 3 verschillende advertentieteksten (kop + hoofdtekst):
+          - Ad 1: Focus op de pijn-oplossing (Direct-response)
+          - Ad 2: Focus op een lifestyle/voordeel-haak
+          - Ad 3: Korte, krachtige tekst voor Story/Reels indeling (inclusief call-to-action)
+          
+          ## 3. TikTok / Short-form Video Script (UGC Stijl)
+          Schrijf een script van 30 seconden. Geef per scène aan wat er in beeld te zien moet zijn (Visueel) en wat de voice-over (Audio) zegt. Zorg voor een sterke 'hook' in de eerste 3 seconden.
           '''
           
-          print('-> Gemini genereert nu de webshoptekst...')
+          print('-> Gemini genereert nu het volledige marketingpakket...')
           ai_response = client.models.generate_content(
               model='gemini-2.5-flash',
               contents=prompt,
               config={'system_instruction': system_instruction}
           )
           
-          # 5. Sla het resultaat netjes op in de map 'producten'
           datum = datetime.date.today().strftime('%d-%m-%Y')
           os.makedirs('producten', exist_ok=True)
           filename = f'producten/winner_{datum}.md'
           
           with open(filename, 'w', encoding='utf-8') as f:
-              f.write(f'# {product_naam}\n\n')
-              f.write(f'**Bron:** {source_url}\n')
-              f.write(f'**Gescout op:** {datum}\n\n')
+              f.write(f'# Marketing Pakket: {product_naam}\n')
+              f.write(f'**Gescout via WinningHunter op:** {datum}\n')
+              f.write(f'**Bron URL:** {source_url}\n\n')
               f.write('--- \n\n')
               f.write(ai_response.text)
               
-          print(f'-> Bestand succesvol opgeslagen in {filename}!')
+          print(f'-> Alles succesvol opgeslagen in {filename}!')
           "
 
       - name: Wijzigingen opslaan in GitHub
@@ -104,4 +106,4 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add producten/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Live WinningHunter product automatisch verwerkt" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Volledig AI marketingpakket toegevoegd voor winner" && git push)
