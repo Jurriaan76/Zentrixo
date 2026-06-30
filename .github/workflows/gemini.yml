@@ -1,15 +1,19 @@
-name: Gemini Assistent
+
+name: Gemini Voorraad Assistent
 
 on:
-  issues:
-    types: [opened]
+  push:
+    paths:
+      - 'voorraad.md'
 
 jobs:
-  run-script:
+  process-inventory:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -17,47 +21,74 @@ jobs:
           python-version: '3.10'
 
       - name: Installeer bibliotheken
-        run: pip install google-genai requests
+        run: pip install google-genai
 
-      - name: Voer assistent uit
+      - name: Verwerk nieuwe producten
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          REPO: ${{ github.repository }}
         run: |
           python -c "
-          import os, requests
+          import os, re
           from google import genai
           
           api_key = os.getenv('GEMINI_API_KEY')
-          github_token = os.getenv('GITHUB_TOKEN')
-          repo = os.getenv('REPO')
-          issue_number = os.getenv('ISSUE_NUMBER')
-          issue_body = os.getenv('ISSUE_BODY', 'Geen tekst meegegeven.')
-          
-          # We proberen de regels uit prompts.md te lezen
+          if not os.path.exists('voorraad.md'):
+              print('Geen voorraad.md gevonden.')
+              exit(0)
+              
+          with open('voorraad.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+              
+          # Check of er een product op 'Wacht op AI' staat
+          if 'Wacht op AI' not in content:
+              print('Geen nieuwe producten die wachten op AI.')
+              exit(0)
+              
+          # Laad de instructies uit prompts.md
           system_instruction = 'Je bent de e-commerce AI-assistent voor Zentrixo.nl.'
           if os.path.exists('prompts.md'):
               with open('prompts.md', 'r', encoding='utf-8') as f:
                   system_instruction = f.read()
-              print('-> prompts.md succesvol ingeladen!')
-          else:
-              print('-> WAARSCHUWING: prompts.md niet gevonden in de hoofdmap!')
           
-          print('-> Verbinding maken met Gemini...')
-          client = genai.Client(api_key=api_key)
+          # Zoek de rij die wacht op verwerking
+          lines = content.split('\n')
+          updated = False
           
-          response = client.models.generate_content(
-              model='gemini-2.5-flash',
-              contents=issue_body,
-              config={'system_instruction': system_instruction}
-          )
-          gpt_tekst = response.text
-          
-          url = f'https://api.github.com/repos/{repo}/issues/{issue_number}/comments'
-          headers = {'Authorization': f'token {github_token}', 'Accept': 'application/vnd.github.v3+json'}
-          requests.post(url, headers=headers, json={'body': gpt_tekst})
-          print('-> Antwoord geplaatst op basis van prompts.md!')
+          for i, line in enumerate(lines):
+              if 'Wacht op AI' in line:
+                  parts = [p.strip() for p in line.split('|')]
+                  if len(parts) >= 4:
+                      product_naam = parts[1]
+                      bron_data = parts[2]
+                      
+                      print(f'-> Nieuw product ontdekt: {product_naam}. Gemini start nu...')
+                      
+                      client = genai.Client(api_key=api_key)
+                      prompt = f'Genereer een producttekst voor het product: {product_naam}. Input data/bron: {bron_data}'
+                      
+                      response = client.models.generate_content(
+                          model='gemini-2.5-flash',
+                          contents=prompt,
+                          config={'system_instruction': system_instruction}
+                      )
+                      
+                      # Zet de tekst op één regel (zodat de Markdown tabel heel blijft)
+                      clean_text = response.text.replace('\n', ' <br> ').replace('|', '\\|')
+                      
+                      # Update de rij status en voeg de tekst toe
+                      lines[i] = f'| {product_naam} | {bron_data} | Verwerkt door AI | {clean_text} |'
+                      updated = True
+                      break # We verwerken ze één voor één per push
+                      
+          if updated:
+              with open('voorraad.md', 'w', encoding='utf-8') as f:
+                  f.write('\n'.join(lines))
+              print('-> voorraad.md succesvol bijgewerkt met AI tekst!')
           "
+
+      - name: Commit en Push wijzigingen back naar GitHub
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add voorraad.md
+          git diff --quiet && git diff --staged --quiet || (git commit -m "AI producttekst automatisch toegevoegd" && git push)
