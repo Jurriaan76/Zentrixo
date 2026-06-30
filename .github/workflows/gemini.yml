@@ -1,9 +1,9 @@
-name: Zentrixo WinningHunter Automation
+name: Zentrixo WinningHunter Automation (5 Products)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Handmatig starten wanneer je wilt
   schedule:
-    - cron: '0 9 * * *'
+    - cron: '0 9 * * *' # Draait elke ochtend automatisch om 09:00 uur
 
 jobs:
   fetch-and-generate:
@@ -20,13 +20,13 @@ jobs:
       - name: Installeren
         run: pip install google-genai requests
 
-      - name: WinningHunter API aanroepen & Volledige Marketing Genereren
+      - name: WinningHunter API aanroepen & 5 Producten Verwerken
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           WINNINGHUNTER_API_KEY: ${{ secrets.WINNINGHUNTER_API_KEY }}
         run: |
           python -c "
-          import os, datetime, requests
+          import os, datetime, requests, re
           from google import genai
           
           gemini_key = os.getenv('GEMINI_API_KEY')
@@ -37,68 +37,71 @@ jobs:
               with open('prompts.md', 'r', encoding='utf-8') as f:
                   system_instruction = f.read()
           
-          wh_url = 'https://api.winninghunter.com/v1/products?limit=1&sort=trending'
+          # De limiet staat nu strak op 5 producten ingesteld!
+          wh_url = 'https://api.winninghunter.com/v1/products?limit=5&sort=trending'
           headers = {'Authorization': f'Bearer {wh_key}', 'Accept': 'application/json'}
           
-          print('-> Live data ophalen uit WinningHunter...')
+          print('-> Live 5 producten ophalen uit WinningHunter...')
+          products_list = []
           try:
               response = requests.get(wh_url, headers=headers)
               response.raise_for_status()
               wh_data = response.json()
-              product = wh_data.get('products', [{}])[0]
-              product_naam = product.get('title', 'Onbekend Trend Product')
-              product_description = product.get('description', '')
-              source_url = product.get('source_url', 'Geen link')
+              products_list = wh_data.get('products', [])
+              print(f'-> Succesvol {len(products_list)} producten binnengehaald uit API.')
           except Exception as e:
-              print(f'-> API Connectie mislukt, we gebruiken de test-ventilator: {e}')
-              product_naam = 'Draagbare Nekventilator Pro'
-              product_description = 'Draadloze, bladloze nekventilator met 3 snelheden. Hard lopend in Home/Personal care.'
-              source_url = 'https://winninghunter.com/mock-product'
+              print(f'-> API Connectie mislukt: {e}')
+              products_list = [
+                  {'title': 'Draagbare Nekventilator Pro', 'description': 'Draadloze nekventilator.', 'source_url': 'https://winninghunter.com/1'},
+                  {'title': 'Anti-Knoei Voerbak', 'description': 'Handige anti-spill hondenvoerbak.', 'source_url': 'https://winninghunter.com/2'},
+                  {'title': 'Orthopedisch Zitkussen', 'description': 'Traagschuim kussen tegen rugpijn.', 'source_url': 'https://winninghunter.com/3'}
+              ]
           
           client = genai.Client(api_key=gemini_key)
-          
-          # We breiden de opdracht aan Gemini fors uit
-          prompt = f'''
-          Maak een compleet marketingpakket in het Nederlands voor Zentrixo.nl op basis van dit WinningHunter product.
-          
-          Product: {product_naam}
-          Specificaties/Data: {product_description}
-          Bron: {source_url}
-          
-          Lever de volgende onderdelen op, strak gescheiden met duidelijke koppen:
-          
-          ## 1. Webshop Productpagina
-          Schrijf een converterende producttekst volgens de exacte richtlijnen in de systeem-instructie.
-          
-          ## 2. Meta Ads (Facebook & Instagram) Campaign
-          Schrijf 3 verschillende advertentieteksten (kop + hoofdtekst):
-          - Ad 1: Focus op de pijn-oplossing (Direct-response)
-          - Ad 2: Focus op een lifestyle/voordeel-haak
-          - Ad 3: Korte, krachtige tekst voor Story/Reels indeling (inclusief call-to-action)
-          
-          ## 3. TikTok / Short-form Video Script (UGC Stijl)
-          Schrijf een script van 30 seconden. Geef per scène aan wat er in beeld te zien moet zijn (Visueel) en wat de voice-over (Audio) zegt. Zorg voor een sterke 'hook' in de eerste 3 seconden.
-          '''
-          
-          print('-> Gemini genereert nu het volledige marketingpakket...')
-          ai_response = client.models.generate_content(
-              model='gemini-2.5-flash',
-              contents=prompt,
-              config={'system_instruction': system_instruction}
-          )
-          
           datum = datetime.date.today().strftime('%d-%m-%Y')
           os.makedirs('producten', exist_ok=True)
-          filename = f'producten/winner_{datum}.md'
           
-          with open(filename, 'w', encoding='utf-8') as f:
-              f.write(f'# Marketing Pakket: {product_naam}\n')
-              f.write(f'**Gescout via WinningHunter op:** {datum}\n')
-              f.write(f'**Bron URL:** {source_url}\n\n')
-              f.write('--- \n\n')
-              f.write(ai_response.text)
+          # Loop door de top 5 producten heen
+          for index, product in enumerate(products_list[:5], start=1):
+              product_naam = product.get('title', f'Trend Product {index}')
+              product_description = product.get('description', '')
+              source_url = product.get('source_url', 'Geen link')
               
-          print(f'-> Alles succesvol opgeslagen in {filename}!')
+              print(f'-> [{index}/5] Gemini genereert marketingpakket voor: {product_naam}...')
+              
+              prompt = f'''
+              Maak een compleet marketingpakket in het Nederlands voor Zentrixo.nl.
+              
+              Product: {product_naam}
+              Specificaties/Data: {product_description}
+              Bron: {source_url}
+              
+              Lever de volgende onderdelen op, strak gescheiden met duidelijke koppen:
+              ## 1. Webshop Productpagina
+              ## 2. Meta Ads (Facebook & Instagram) Campaign (3 Ads)
+              ## 3. TikTok / Short-form Video Script (UGC Stijl)
+              '''
+              
+              try:
+                  ai_response = client.models.generate_content(
+                      model='gemini-2.5-flash',
+                      contents=prompt,
+                      config={'system_instruction': system_instruction}
+                  )
+                  
+                  safe_title = re.sub(r'[^a-zA-Z0-9]', '_', product_naam).lower()[:20]
+                  filename = f'producten/{datum}_{safe_title}.md'
+                  
+                  with open(filename, 'w', encoding='utf-8') as f:
+                      f.write(f'# Marketing Pakket: {product_naam}\n')
+                      f.write(f'**Gescout via WinningHunter op:** {datum}\n')
+                      f.write(f'**Bron URL:** {source_url}\n\n')
+                      f.write('--- \n\n')
+                      f.write(ai_response.text)
+                      
+                  print(f'-> Opgeslagen in {filename}')
+              except Exception as ai_err:
+                  print(f'-> Fout bij genereren voor {product_naam}: {ai_err}')
           "
 
       - name: Wijzigingen opslaan in GitHub
@@ -106,4 +109,4 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add producten/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Volledig AI marketingpakket toegevoegd voor winner" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "5 live WinningHunter marketingpakketten automatisch toegevoegd" && git push)
