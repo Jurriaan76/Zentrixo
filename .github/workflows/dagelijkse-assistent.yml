@@ -26,5 +26,5 @@ jobs:
           ISSUE_NUMBER: '1' # We testen nu hardcoded op je eerste issue!
           ISSUE_TITLE: 'Handmatige Test'
           ISSUE_BODY: 'Dit is een handmatige test om te kijken of de API-verbinding werkt.'
-          REPO: ${{ github.repository }}
-        run: python .github/scripts/assistent.py
+          REPO: ${{ github.repository }}        
+run: python assistent.py
