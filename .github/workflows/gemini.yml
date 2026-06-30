@@ -37,15 +37,27 @@ jobs:
           issue_number = os.getenv('ISSUE_NUMBER')
           issue_body = os.getenv('ISSUE_BODY', 'Geen tekst meegegeven.')
           
-          # We sturen de tekst van jouw Issue rechtstreeks naar Gemini
+          # We proberen de regels uit prompts.md te lezen
+          system_instruction = 'Je bent de e-commerce AI-assistent voor Zentrixo.nl.'
+          if os.path.exists('prompts.md'):
+              with open('prompts.md', 'r', encoding='utf-8') as f:
+                  system_instruction = f.read()
+              print('-> prompts.md succesvol ingeladen!')
+          else:
+              print('-> WAARSCHUWING: prompts.md niet gevonden in de hoofdmap!')
+          
+          print('-> Verbinding maken met Gemini...')
           client = genai.Client(api_key=api_key)
+          
           response = client.models.generate_content(
-              model='gemini-2.5-flash', 
-              contents=issue_body
+              model='gemini-2.5-flash',
+              contents=issue_body,
+              config={'system_instruction': system_instruction}
           )
           gpt_tekst = response.text
           
           url = f'https://api.github.com/repos/{repo}/issues/{issue_number}/comments'
           headers = {'Authorization': f'token {github_token}', 'Accept': 'application/vnd.github.v3+json'}
           requests.post(url, headers=headers, json={'body': gpt_tekst})
+          print('-> Antwoord geplaatst op basis van prompts.md!')
           "
