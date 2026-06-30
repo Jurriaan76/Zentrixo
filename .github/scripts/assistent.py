@@ -1,30 +1,50 @@
-name: Gemini Dagelijkse Assistent
+import os
+import requests
+from google import genai
 
-on:
-  workflow_dispatch:
+# Gegevens ophalen uit GitHub Actions
+api_key = os.getenv("GEMINI_API_KEY")
+github_token = os.getenv("GITHUB_TOKEN")
+repo = os.getenv("REPO")
+issue_number = os.getenv("ISSUE_NUMBER")
 
-jobs:
-  assisteer:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+print(f"=== DEBUG: Start script voor Repo: {repo}, Issue: {issue_number} ===")
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+if not api_key or not github_token:
+    print("❌ FOUT: GEMINI_API_KEY of GITHUB_TOKEN ontbreekt in de omgevingsvariabelen!")
+    exit(1)
 
-      - name: Installeer bibliotheken
-        run: |
-          pip install google-genai requests
+# 1. Praten met Gemini
+try:
+    print("-> Verbinding maken met Gemini API...")
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents='Dit is een automatische test. Reageer met: Hallo! De koppeling werkt perfect!'
+    )
+    gpt_tekst = response.text
+    print(f"-> Gemini antwoord ontvangen: {gpt_tekst}")
+except Exception as e:
+    print(f"❌ FOUT tijdens Gemini API aanroep: {e}")
+    exit(1)
 
-      - name: Voer assistent-script uit
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: '1'
-          ISSUE_TITLE: 'Handmatige Test'
-          ISSUE_BODY: 'Dit is een handmatige test om te kijken of de API-verbinding werkt.'
-          REPO: ${{ github.repository }}
-        run: python assistent.py
+# 2. Reactie plaatsen op GitHub Issue
+url = f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments"
+headers = {
+    "Authorization": f"token {github_token}",
+    "Accept": "application/vnd.github.v3+json"
+}
+data = {"body": gpt_tekst}
+
+try:
+    print(f"-> Poging tot plaatsen reactie op URL: {url}")
+    res = requests.post(url, headers=headers, json=data)
+    print(f"-> GitHub API Statuscode: {res.statuscode}")
+    print(f"-> GitHub API Response: {res.text}")
+    
+    if res.status_code == 201:
+        print("✅ SUCCES: Reactie is succesvol geplaatst!")
+    else:
+        print(f"❌ FOUT: GitHub weigerde de reactie. Status: {res.status_code}")
+except Exception as e:
+    print(f"❌ FOUT tijdens verzenden naar GitHub: {e}")
