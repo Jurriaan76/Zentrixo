@@ -641,3 +641,7 @@ Hieronder staan de producten die via WinningHunter zijn gevonden. De Gemini Assi
 | 22-11-2026 | Draagbare Nekventilator Pro | Personal Care | Gescout (Scaling) | [Bekijk Pakket ↗](producten/22-11-2026_draagbare_nekventila.md) |
 | 22-11-2026 | Anti-Knoei Voerbak | Home & Living | Gescout (Scaling) | [Bekijk Pakket ↗](producten/22-11-2026_anti_knoei_voerbak.md) |
 | 22-11-2026 | Orthopedisch Traagschuim Zitkussen | Personal Care | Gescout (Scaling) | [Bekijk Pakket ↗](producten/22-11-2026_orthopedisch_traagsc.md) |
+| 23-11-2026 | Draagbare Nekventilator Pro | Personal Care | Gescout (Scaling) | [Bekijk Pakket ↗](producten/23-11-2026_draagbare_nekventila.md) |
+| 23-11-2026 | Anti-Knoei Voerbak | Home & Living | Gescout (Scaling) | [Bekijk Pakket ↗](producten/23-11-2026_anti_knoei_voerbak.md) |
+| 23-11-2026 | Orthopedisch Traagschuim Zitkussen | Home & Living | Gescout (Scaling) | [Bekijk Pakket ↗](producten/23-11-2026_orthopedisch_traagsc.md) |
+| 23-11-2026 | Intelligente Nek Massager | Personal Care | Gescout (Scaling) | [Bekijk Pakket ↗](producten/23-11-2026_intelligente_nek_mas.md) |
